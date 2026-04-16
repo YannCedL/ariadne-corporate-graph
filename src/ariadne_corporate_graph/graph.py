@@ -66,3 +66,5 @@ def build_company_graph(root_siren: str) -> ResultContract:
     ))
     
     return contract
+
+
