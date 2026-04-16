@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARIADNE — Corporate Ownership Graph</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(18, 26, 43, 0.85);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-color: #8b5cf6;
+            --accent-hover: #7c3aed;
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            background-image: radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 40%);
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+        }
+
+        .logo-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .logo-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 0.75rem;
+            background: var(--card-bg);
+            padding: 0.5rem;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            max-width: 600px;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-box input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-color);
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+        }
+
+        .search-box button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.25rem;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .graph-container {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            min-height: 500px;
+            position: relative;
+            backdrop-filter: blur(12px);
+        }
+
+        #mynetwork {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+        }
+
+        .badge {
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(139, 92, 246, 0.2);
+            color: #a78bfa;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-icon">A</div>
+            <div>
+                <div class="logo-title">ARIADNE</div>
+                <div class="logo-subtitle">Graphe d'Actionnariat et Filiales</div>
+            </div>
+        </div>
+        <div class="badge">V1.0.0 — NETWORK VISUALIZER</div>
+    </header>
+
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Entrez un nom ou SIREN (ex: Airbus, Total, 383474814)..." value="Airbus">
+        <button onclick="chargerGraphe()">Visualiser le Graphe</button>
+    </div>
+
+    <div class="graph-container">
+        <div id="mynetwork"></div>
+    </div>
+
+    <script>
+        let network = null;
+
+        async function chargerGraphe() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            try {
+                const response = await fetch(`/api/v1/graph/${encodeURIComponent(query)}`);
+                const contract = await response.json();
+                const data = contract.result;
+
+                // preparation des noeuds et liens pour vis.js
+                const nodes = data.nodes.map(n => ({
+                    id: n.siren,
+                    label: `${n.name}\n(${n.role || 'Société'})`,
+                    shape: 'box',
+                    margin: 12,
+                    color: {
+                        background: n.role && n.role.includes('Holding') ? '#6d28d9' : '#1e293b',
+                        border: '#8b5cf6',
+                        highlight: { background: '#7c3aed', border: '#a78bfa' }
+                    },
+                    font: { color: '#ffffff', face: 'Inter', size: 14 }
+                }));
+
+                const edges = data.edges.map(e => ({
+                    from: e.from,
+                    to: e.to,
+                    label: `${e.percentage}%`,
+                    arrows: 'to',
+                    color: { color: '#8b5cf6', highlight: '#a78bfa' },
+                    font: { color: '#9ca3af', size: 12, align: 'top' }
+                }));
+
+                const container = document.getElementById('mynetwork');
+                const graphData = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+                
+                const options = {
+                    physics: {
+                        solver: 'forceAtlas2Based',
+                        forceAtlas2Based: { gravitationalConstant: -50, centralGravity: 0.01, springLength: 100 }
+                    }
+                };
+
+                if (network) network.destroy();
+                network = new vis.Network(container, graphData, options);
+
+            } catch (err) {
+                alert("Erreur lors du chargement du graphe d'actionnariat.");
+            }
+        }
+
+        window.onload = chargerGraphe;
+    </script>
+</body>
+</html>
